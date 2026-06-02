@@ -93,7 +93,7 @@ function saveToken(event) {
   loadData();
 }
 
-async function loadData() {
+async function loadData(retryAuth = true) {
   if (!state.token) {
     openTokenDialog();
     return;
@@ -111,7 +111,16 @@ async function loadData() {
     render();
   } catch (error) {
     setStatus(error.message, true);
-    if (isAuthError(error)) {
+    if (isAuthError(error) && retryAuth) {
+      sessionStorage.removeItem('presensi_admin_token');
+      state.token = '';
+      await bootstrapToken();
+      if (state.token) {
+        await loadData(false);
+        return;
+      }
+      openTokenDialog();
+    } else if (isAuthError(error)) {
       openTokenDialog();
     }
   }
