@@ -197,11 +197,11 @@ th {
   text-transform: uppercase;
 }
 
-td.actions {
+.actions {
   white-space: nowrap;
 }
 
-td.actions button {
+.actions button {
   margin-right: 6px;
   padding: 8px 10px;
 }

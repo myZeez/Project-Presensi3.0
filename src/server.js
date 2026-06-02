@@ -80,6 +80,7 @@ async function handleApi(req, res, parts) {
 
 async function employeesApi(req, res, employeeId) {
   if (req.method === 'GET') {
+    await repairEmployeeIds();
     json(req, res, 200, {
       ok: true,
       data: await sheetsApi.list(sheets.employees),
@@ -93,7 +94,7 @@ async function employeesApi(req, res, employeeId) {
     const payload = await readBody(req);
     requireFields(payload, ['nama', 'username', 'password']);
     const item = normalizeEmployee(payload, {
-      id: payload.id || nextEmployeeId(existing),
+      id: nextEmployeeId(existing),
       password_hash: hashPassword(payload.password),
     });
     await sheetsApi.append(sheets.employees, item);
@@ -179,17 +180,13 @@ async function attendanceApi(req, res, attendanceId) {
 
 function normalizeEmployee(payload, fallback = {}) {
   return {
-    id: String(payload.id ?? fallback.id ?? '').trim(),
-    nama: String(payload.nama ?? fallback.nama ?? '').trim(),
-    username: String(payload.username ?? fallback.username ?? '').trim(),
-    password_hash: String(payload.password_hash ?? fallback.password_hash ?? ''),
-    lokasi_toko_lat: String(
-      payload.lokasi_toko_lat ?? fallback.lokasi_toko_lat ?? '',
-    ).trim(),
-    lokasi_toko_lng: String(
-      payload.lokasi_toko_lng ?? fallback.lokasi_toko_lng ?? '',
-    ).trim(),
-    status: String(payload.status ?? fallback.status ?? 'aktif').trim(),
+    id: valueOr(payload.id, fallback.id),
+    nama: valueOr(payload.nama, fallback.nama),
+    username: valueOr(payload.username, fallback.username),
+    password_hash: valueOr(payload.password_hash, fallback.password_hash),
+    lokasi_toko_lat: valueOr(payload.lokasi_toko_lat, fallback.lokasi_toko_lat),
+    lokasi_toko_lng: valueOr(payload.lokasi_toko_lng, fallback.lokasi_toko_lng),
+    status: valueOr(payload.status, fallback.status, 'aktif'),
   };
 }
 
@@ -231,6 +228,48 @@ function nextEmployeeId(existing) {
       .filter(Number.isFinite)
       .reduce((max, value) => Math.max(max, value), 0) + 1;
   return String(next).padStart(3, '0');
+}
+
+async function repairEmployeeIds() {
+  const employees = await sheetsApi.list(sheets.employees, {
+    includeBlankId: true,
+  });
+  let next =
+    employees
+      .map((item) => Number.parseInt(item.id, 10))
+      .filter(Number.isFinite)
+      .reduce((max, value) => Math.max(max, value), 0) + 1;
+
+  for (const employee of employees) {
+    const hasData = Boolean(
+      employee.nama ||
+        employee.username ||
+        employee.password_hash ||
+        employee.lokasi_toko_lat ||
+        employee.lokasi_toko_lng ||
+        employee.status,
+    );
+    const idText = String(employee.id || '').trim();
+    const numericId = Number.parseInt(idText, 10);
+    const needsPaddedId =
+      /^\d+$/.test(idText) && idText.length < 3;
+    if ((!needsPaddedId && idText) || !hasData) {
+      continue;
+    }
+
+    const repairedId = needsPaddedId
+      ? String(numericId).padStart(3, '0')
+      : String(next).padStart(3, '0');
+    const repaired = normalizeEmployee({
+      ...employee,
+      id: repairedId,
+      status: 'aktif',
+    });
+    if (!needsPaddedId) {
+      next += 1;
+    }
+    await sheetsApi.update(sheets.employees, employee._rowNumber, repaired);
+  }
 }
 
 function serveStatic(req, res) {

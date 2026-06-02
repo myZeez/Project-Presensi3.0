@@ -244,10 +244,10 @@ function rowHtml(cells, tag = 'td') {
 }
 
 function actions(id) {
-  return `<td class="actions">
+  return `<div class="actions">
     <button type="button" data-action="edit" data-id="${esc(id)}">Edit</button>
     <button class="danger" type="button" data-action="delete" data-id="${esc(id)}">Hapus</button>
-  </td>`;
+  </div>`;
 }
 
 function pill(text, good) {

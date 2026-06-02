@@ -7,6 +7,7 @@ const apiBase = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 let cachedToken = null;
 const ensuredSheets = new Set();
+const sheetTitleAliases = new Map();
 
 function spreadsheetId() {
   const id = process.env.GOOGLE_SPREADSHEET_ID;
@@ -105,19 +106,21 @@ function objectToRow(item, columns) {
   return columns.map((column) => item[column] ?? '');
 }
 
-async function list(sheet) {
-  await ensureSheet(sheet);
-  const data = await request(`/values/${encodeURIComponent(sheet.range)}`);
+async function list(sheet, options = {}) {
+  const title = await usableTitle(sheet);
+  const data = await request(
+    `/values/${encodeURIComponent(`${title}!A2:${columnName(sheet.columns.length)}`)}`,
+  );
   const rows = data.values || [];
   return rows
     .map((row, index) => rowToObject(row, sheet.columns, index + 2))
-    .filter((row) => String(row.id || '').trim());
+    .filter((row) => options.includeBlankId || String(row.id || '').trim());
 }
 
 async function append(sheet, item) {
-  await ensureSheet(sheet);
+  const title = await usableTitle(sheet);
   await request(
-    `/values/${encodeURIComponent(`${sheet.title}!A:${columnName(sheet.columns.length)}`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(`${title}!A:${columnName(sheet.columns.length)}`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     {
       method: 'POST',
       body: JSON.stringify({ values: [objectToRow(item, sheet.columns)] }),
@@ -127,9 +130,9 @@ async function append(sheet, item) {
 }
 
 async function update(sheet, rowNumber, item) {
-  await ensureSheet(sheet);
-  const range = `${sheet.title}!A${rowNumber}:${columnName(sheet.columns.length)}${rowNumber}`;
-  await request(`/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
+  const title = await usableTitle(sheet);
+  const range = `${title}!A${rowNumber}:${columnName(sheet.columns.length)}${rowNumber}`;
+  await request(`/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
     method: 'PUT',
     body: JSON.stringify({ values: [objectToRow(item, sheet.columns)] }),
   });
@@ -137,8 +140,8 @@ async function update(sheet, rowNumber, item) {
 }
 
 async function remove(sheet, rowNumber) {
-  await ensureSheet(sheet);
-  const sheetId = await sheetNumericId(sheet.title);
+  const title = await usableTitle(sheet);
+  const sheetId = await sheetNumericId(title);
   await request(':batchUpdate', {
     method: 'POST',
     body: JSON.stringify({
@@ -156,6 +159,26 @@ async function remove(sheet, rowNumber) {
       ],
     }),
   });
+}
+
+async function usableTitle(sheet) {
+  if (sheetTitleAliases.has(sheet.title)) {
+    return sheetTitleAliases.get(sheet.title);
+  }
+
+  await ensureSheet(sheet);
+
+  if (await hasDataRows(sheet.title, sheet.columns.length)) {
+    return sheet.title;
+  }
+
+  const compatibleTitle = await findCompatibleSheetWithData(sheet);
+  if (compatibleTitle) {
+    sheetTitleAliases.set(sheet.title, compatibleTitle);
+    return compatibleTitle;
+  }
+
+  return sheet.title;
 }
 
 async function ensureSheet(sheet) {
@@ -197,6 +220,49 @@ async function ensureSheet(sheet) {
   });
 
   ensuredSheets.add(sheet.title);
+}
+
+async function findCompatibleSheetWithData(sheet) {
+  const data = await request('?fields=sheets.properties');
+  const propertiesList = data.sheets?.map((item) => item.properties) || [];
+
+  for (const properties of propertiesList) {
+    const title = properties.title;
+    if (title === sheet.title) {
+      continue;
+    }
+
+    if (!(await hasMatchingHeader(title, sheet.columns))) {
+      continue;
+    }
+
+    if (await hasDataRows(title, sheet.columns.length)) {
+      return title;
+    }
+  }
+
+  return null;
+}
+
+async function hasMatchingHeader(title, columns) {
+  const range = `${title}!A1:${columnName(columns.length)}1`;
+  const data = await request(`/values/${encodeURIComponent(range)}`);
+  const header = data.values?.[0] || [];
+  return columns.every((column, index) => {
+    return normalizeHeader(header[index]) === normalizeHeader(column);
+  });
+}
+
+async function hasDataRows(title, columnCount) {
+  const range = `${title}!A2:${columnName(columnCount)}`;
+  const data = await request(`/values/${encodeURIComponent(range)}`);
+  return (data.values || []).some((row) =>
+    row.some((cell) => String(cell || '').trim()),
+  );
+}
+
+function normalizeHeader(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 async function sheetNumericId(title) {
