@@ -1,0 +1,7 @@
+node_modules/
+.env
+.admin-token
+backend-app-key.json
+gen-lang-client-*.json
+*.local.json
+*.log

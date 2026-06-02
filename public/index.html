@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Presensi</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">P-Presensi 3.0</p>
+        <h1>Admin Presensi</h1>
+      </div>
+      <div class="top-actions">
+        <button id="tokenBtn" class="ghost" type="button">Token Admin</button>
+        <button id="refreshBtn" class="ghost" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="summary" aria-label="Ringkasan">
+        <article>
+          <span id="employeeCount">0</span>
+          <p>Karyawan</p>
+        </article>
+        <article>
+          <span id="attendanceCount">0</span>
+          <p>Data Presensi</p>
+        </article>
+        <article>
+          <span id="todayCount">0</span>
+          <p>Presensi Hari Ini</p>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="tabs" role="tablist" aria-label="Menu admin">
+          <button class="tab active" data-tab="employees" type="button">Karyawan</button>
+          <button class="tab" data-tab="attendance" type="button">Presensi</button>
+        </div>
+
+        <div class="toolbar">
+          <input id="searchInput" type="search" placeholder="Cari data..." />
+          <button id="addBtn" type="button">Tambah Karyawan</button>
+        </div>
+
+        <p id="statusText" class="status">Masukkan token admin untuk memuat data.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="tokenDialog">
+      <form id="tokenForm" method="dialog">
+        <h2>Token Admin</h2>
+        <p class="muted">Token hanya disimpan di browser ini menggunakan sessionStorage.</p>
+        <label>
+          ADMIN_API_TOKEN
+          <input name="token" type="password" autocomplete="current-password" required />
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" data-close>Batal</button>
+          <button type="submit">Simpan Token</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="employeeDialog">
+      <form id="employeeForm" method="dialog">
+        <h2 id="employeeDialogTitle">Tambah Karyawan</h2>
+        <input type="hidden" name="id" />
+        <label>
+          Nama
+          <input name="nama" required />
+        </label>
+        <label>
+          Username
+          <input name="username" required />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" />
+          <small>Kosongkan saat edit jika password tidak diganti.</small>
+        </label>
+        <div class="grid-2">
+          <label>
+            Latitude Toko
+            <input name="lokasi_toko_lat" type="number" step="any" />
+          </label>
+          <label>
+            Longitude Toko
+            <input name="lokasi_toko_lng" type="number" step="any" />
+          </label>
+        </div>
+        <label>
+          Status
+          <select name="status">
+            <option value="aktif">aktif</option>
+            <option value="nonaktif">nonaktif</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" data-close>Batal</button>
+          <button type="submit">Simpan</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="attendanceDialog">
+      <form id="attendanceForm" method="dialog">
+        <h2 id="attendanceDialogTitle">Edit Presensi</h2>
+        <input type="hidden" name="id" />
+        <div class="grid-2">
+          <label>
+            ID Karyawan
+            <input name="employee_id" required />
+          </label>
+          <label>
+            Nama
+            <input name="nama" required />
+          </label>
+        </div>
+        <div class="grid-2">
+          <label>
+            Tanggal
+            <input name="tanggal" type="date" required />
+          </label>
+          <label>
+            Jam
+            <input name="jam" type="time" step="1" required />
+          </label>
+        </div>
+        <div class="grid-2">
+          <label>
+            Tipe
+            <select name="tipe">
+              <option>Masuk</option>
+              <option>Pulang</option>
+              <option>Lembur</option>
+              <option>Sakit</option>
+              <option>Izin</option>
+              <option>Tanpa Keterangan</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select name="status">
+              <option>Valid</option>
+              <option>Ditolak</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid-3">
+          <label>
+            Latitude
+            <input name="latitude" type="number" step="any" />
+          </label>
+          <label>
+            Longitude
+            <input name="longitude" type="number" step="any" />
+          </label>
+          <label>
+            Jarak
+            <input name="jarak" type="number" step="any" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" data-close>Batal</button>
+          <button type="submit">Simpan</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

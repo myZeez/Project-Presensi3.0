@@ -1,0 +1,20 @@
+{
+  "name": "p-presensi-backend",
+  "version": "1.0.0",
+  "description": "Backend sederhana untuk manajemen data karyawan dan presensi aplikasi Flutter P-Presensi 3.0.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "serve": "node src/server.js",
+    "check": "node --check src/server.js && node --check src/db.js && node --check src/utils.js && node --check src/googleSheets.js"
+  },
+  "keywords": [
+    "presensi",
+    "attendance",
+    "backend"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true
+}
