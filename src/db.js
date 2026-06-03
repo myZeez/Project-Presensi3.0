@@ -28,6 +28,11 @@ const sheets = {
       'status',
     ],
   },
+  settings: {
+    title: 'settings',
+    range: 'settings!A2:C',
+    columns: ['key', 'value', 'description'],
+  },
 };
 
 module.exports = { sheets };

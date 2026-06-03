@@ -106,6 +106,10 @@ function objectToRow(item, columns) {
   return columns.map((column) => item[column] ?? '');
 }
 
+function idColumn(sheet) {
+  return sheet.columns.includes('id') ? 'id' : sheet.columns[0];
+}
+
 async function list(sheet, options = {}) {
   const title = await usableTitle(sheet);
   const data = await request(
@@ -114,7 +118,7 @@ async function list(sheet, options = {}) {
   const rows = data.values || [];
   return rows
     .map((row, index) => rowToObject(row, sheet.columns, index + 2))
-    .filter((row) => options.includeBlankId || String(row.id || '').trim());
+    .filter((row) => options.includeBlankId || String(row[idColumn(sheet)] || '').trim());
 }
 
 async function append(sheet, item) {

@@ -1,6 +1,7 @@
 node_modules/
 .env
 .admin-token
+.admin-login.json
 backend-app-key.json
 gen-lang-client-*.json
 *.local.json

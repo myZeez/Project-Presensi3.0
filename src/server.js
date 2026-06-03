@@ -5,16 +5,21 @@ const path = require('path');
 const sheetsApi = require('./googleSheets');
 const { sheets } = require('./db');
 const {
-  adminToken,
-  canBootstrapToken,
+  adminSessionInfo,
+  addAdminUser,
   corsHeaders,
+  createAdminSession,
+  destroyAdminSession,
   hashPassword,
   id,
   json,
+  listAdminUsers,
   readBody,
   requireAdmin,
   requireFields,
+  removeAdminUser,
   routeParts,
+  verifyAdminLogin,
 } = require('./utils');
 
 const publicDir = path.resolve(__dirname, '..', 'public');
@@ -53,13 +58,19 @@ async function handleApi(req, res, parts) {
     return;
   }
 
-  if (parts[0] === 'bootstrap-token') {
-    if (!canBootstrapToken(req)) {
-      json(req, res, 403, { ok: false, message: 'Auto token hanya untuk localhost.' });
-      return;
-    }
+  if (parts[0] === 'login') {
+    await loginApi(req, res);
+    return;
+  }
 
-    json(req, res, 200, { ok: true, token: adminToken() });
+  if (parts[0] === 'logout') {
+    destroyAdminSession(req);
+    json(req, res, 200, { ok: true });
+    return;
+  }
+
+  if (parts[0] === 'session') {
+    json(req, res, 200, { ok: true, data: adminSessionInfo(req) });
     return;
   }
 
@@ -75,7 +86,36 @@ async function handleApi(req, res, parts) {
     return;
   }
 
+  if (parts[0] === 'settings') {
+    await settingsApi(req, res);
+    return;
+  }
+
+  if (parts[0] === 'admins') {
+    await adminsApi(req, res, parts[1]);
+    return;
+  }
+
   json(req, res, 404, { ok: false, message: 'Endpoint tidak ditemukan.' });
+}
+
+async function loginApi(req, res) {
+  if (req.method !== 'POST') {
+    json(req, res, 405, { ok: false, message: 'Method tidak didukung.' });
+    return;
+  }
+
+  const payload = await readBody(req);
+  requireFields(payload, ['username', 'password']);
+  if (!verifyAdminLogin(payload.username, payload.password)) {
+    json(req, res, 401, { ok: false, message: 'Username atau password admin salah.' });
+    return;
+  }
+
+  json(req, res, 200, {
+    ok: true,
+    data: createAdminSession(String(payload.username).trim()),
+  });
 }
 
 async function employeesApi(req, res, employeeId) {
@@ -93,9 +133,12 @@ async function employeesApi(req, res, employeeId) {
   if (req.method === 'POST') {
     const payload = await readBody(req);
     requireFields(payload, ['nama', 'username', 'password']);
+    const settings = await settingsData();
     const item = normalizeEmployee(payload, {
       id: nextEmployeeId(existing),
       password_hash: hashPassword(payload.password),
+      lokasi_toko_lat: settings.store_lat,
+      lokasi_toko_lng: settings.store_lng,
     });
     await sheetsApi.append(sheets.employees, item);
     json(req, res, 201, { ok: true, data: item });
@@ -124,6 +167,65 @@ async function employeesApi(req, res, employeeId) {
   if (req.method === 'DELETE') {
     await sheetsApi.remove(sheets.employees, current._rowNumber);
     json(req, res, 200, { ok: true });
+    return;
+  }
+
+  json(req, res, 405, { ok: false, message: 'Method tidak didukung.' });
+}
+
+async function adminsApi(req, res, username) {
+  if (req.method === 'GET') {
+    json(req, res, 200, { ok: true, data: listAdminUsers() });
+    return;
+  }
+
+  if (req.method === 'POST') {
+    const payload = await readBody(req);
+    json(req, res, 201, { ok: true, data: addAdminUser(payload) });
+    return;
+  }
+
+  if (req.method === 'DELETE') {
+    const current = adminSessionInfo(req);
+    json(req, res, 200, {
+      ok: true,
+      data: removeAdminUser(decodeURIComponent(username || ''), current.username),
+    });
+    return;
+  }
+
+  json(req, res, 405, { ok: false, message: 'Method tidak didukung.' });
+}
+
+async function settingsApi(req, res) {
+  if (req.method === 'GET') {
+    json(req, res, 200, {
+      ok: true,
+      data: await settingsData(),
+    });
+    return;
+  }
+
+  if (req.method === 'PUT') {
+    const payload = await readBody(req);
+    const existing = await sheetsApi.list(sheets.settings, { includeBlankId: true });
+    const items = defaultSettings().map((item) => ({
+      ...item,
+      value: valueOr(payload[item.key], currentSettingValue(existing, item), item.value),
+    }));
+
+    for (const item of items) {
+      const current = existing.find((row) => row.key === item.key);
+      if (current) {
+        await sheetsApi.update(sheets.settings, current._rowNumber, item);
+      } else {
+        await sheetsApi.append(sheets.settings, item);
+      }
+    }
+
+    await syncEmployeeStoreCoordinates(objectFromSettings(items));
+
+    json(req, res, 200, { ok: true, data: objectFromSettings(items) });
     return;
   }
 
@@ -219,6 +321,88 @@ function jakartaNowParts() {
     date: now.toISOString().slice(0, 10),
     time: now.toISOString().slice(11, 19),
   };
+}
+
+async function settingsData() {
+  const existing = await sheetsApi.list(sheets.settings, { includeBlankId: true });
+  const items = [];
+
+  for (const item of defaultSettings()) {
+    const current = existing.find((row) => row.key === item.key);
+    if (current) {
+      items.push({
+        key: item.key,
+        value: valueOr(current.value, item.value),
+        description: valueOr(current.description, item.description),
+      });
+    } else {
+      await sheetsApi.append(sheets.settings, item);
+      items.push(item);
+    }
+  }
+
+  return objectFromSettings(items);
+}
+
+function currentSettingValue(rows, item) {
+  return rows.find((row) => row.key === item.key)?.value;
+}
+
+function objectFromSettings(items) {
+  return Object.fromEntries(items.map((item) => [item.key, item.value]));
+}
+
+function defaultSettings() {
+  return [
+    {
+      key: 'store_lat',
+      value: '-2.214719',
+      description: 'Latitude titik toko utama.',
+    },
+    {
+      key: 'store_lng',
+      value: '113.904409',
+      description: 'Longitude titik toko utama.',
+    },
+    {
+      key: 'attendance_radius_meters',
+      value: '10',
+      description: 'Radius valid presensi dari titik toko dalam meter.',
+    },
+    {
+      key: 'punctual_time',
+      value: '08:00',
+      description: 'Batas jam masuk tepat waktu.',
+    },
+    {
+      key: 'enforce_radius',
+      value: 'false',
+      description: 'Aktifkan validasi radius lokasi.',
+    },
+  ];
+}
+
+async function syncEmployeeStoreCoordinates(settings) {
+  const lat = valueOr(settings.store_lat, '');
+  const lng = valueOr(settings.store_lng, '');
+  if (!lat || !lng) {
+    return;
+  }
+
+  const employees = await sheetsApi.list(sheets.employees);
+  for (const employee of employees) {
+    if (employee.lokasi_toko_lat === lat && employee.lokasi_toko_lng === lng) {
+      continue;
+    }
+    await sheetsApi.update(
+      sheets.employees,
+      employee._rowNumber,
+      normalizeEmployee(
+        { ...employee, lokasi_toko_lat: lat, lokasi_toko_lng: lng },
+        employee,
+      ),
+    );
+  }
 }
 
 function nextEmployeeId(existing) {

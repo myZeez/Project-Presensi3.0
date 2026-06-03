@@ -9,7 +9,41 @@ $env:GOOGLE_SPREADSHEET_ID="1cOTDyiPEJNmNcfl1HTqASQhvRUB2aaF_S0qeBf5ep0Q"
 npm start
 ```
 
-Kalau `ADMIN_API_TOKEN` tidak diisi, backend akan membuat token otomatis di file `.admin-token`. Saat admin dibuka dari `http://localhost:3000`, halaman akan mengambil token itu otomatis.
+Login admin memakai sesi browser. Untuk lokal, credential dibaca dari file `.admin-login.json`:
+
+```text
+username: admin
+password: lihat file .admin-login.json di folder backend lokal
+```
+
+Setelah login, akun admin tambahan bisa dibuat dari tab `Admin`. Password akan disimpan sebagai hash di `.admin-login.json`.
+
+File `.admin-login.json` sudah masuk `.gitignore`. Untuk hosting, lebih aman pakai environment variable:
+
+```text
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=password_rahasia
+```
+
+Atau pakai hash:
+
+```text
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=sha256_password
+```
+
+Kalau butuh banyak admin dari environment variable, isi `ADMIN_USERS_JSON`:
+
+```json
+{
+  "admins": [
+    {
+      "username": "admin",
+      "password_hash": "sha256_password"
+    }
+  ]
+}
+```
 
 Secara default backend membaca credential dari file lokal:
 
@@ -49,7 +83,8 @@ Di hosting API, set juga:
 
 ```text
 GOOGLE_SPREADSHEET_ID=1cOTDyiPEJNmNcfl1HTqASQhvRUB2aaF_S0qeBf5ep0Q
-ADMIN_API_TOKEN=token_rahasia_minimal_16_karakter
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=password_rahasia
 CORS_ORIGIN=https://username.github.io
 GOOGLE_SERVICE_ACCOUNT_JSON={...isi service account json...}
 GOOGLE_SERVICE_ACCOUNT_EMAIL=backend-app@gen-lang-client-0684358981.iam.gserviceaccount.com
@@ -65,18 +100,24 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=backend-app@gen-lang-client-0684358981.iam.gservice
 - `POST /api/attendance`
 - `PUT /api/attendance/:id`
 - `DELETE /api/attendance/:id`
+- `GET /api/admins`
+- `POST /api/admins`
+- `DELETE /api/admins/:username`
 
 Semua endpoint CRUD wajib membawa header:
 
 ```text
-Authorization: Bearer ADMIN_API_TOKEN
+Authorization: Bearer SESSION_TOKEN_DARI_LOGIN
 ```
 
 ## Otomatisasi Spreadsheet
 
 - Sheet `employees` dan `attendance` otomatis dibuat kalau belum ada.
+- Sheet `settings` menyimpan titik toko utama, radius presensi, batas tepat waktu, dan status validasi radius.
 - Header kolom otomatis ditulis di baris pertama.
 - Tambah karyawan dari admin otomatis menulis row baru ke sheet `employees`.
+- Tambah karyawan tidak perlu mengisi koordinat toko. Backend otomatis memakai titik toko dari `settings`.
 - Tambah presensi dari admin otomatis menulis row baru ke sheet `attendance`.
+- Saat titik toko di `settings` diubah, backend menyinkronkan koordinat toko ke semua karyawan agar Flutter tetap punya patokan lokasi.
 - Kalau tanggal atau jam presensi dikosongkan saat request API, backend otomatis memakai waktu sekarang zona WIB.
 - Aplikasi Flutter juga memastikan sheet/header tersedia sebelum membaca data karyawan atau menulis presensi.
